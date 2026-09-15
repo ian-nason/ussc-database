@@ -4,18 +4,19 @@ pretty_name: U.S. Sentencing Commission Individual Offender Database (FY2002-FY2
 title: USSC Federal Sentencing Database
 license: other
 tags: [sentencing, criminal-justice, federal-courts, ussc, duckdb, datapond]
-size_category: 1M<n<10M
+size_category: 10M<n<100M
 alias: ussc
 table_columns: [description, row_count, column_count]
 intro: |
-  Every federal defendant sentenced from FY2002 through FY2025 (~1.6M), from the U.S.
+  Every federal defendant sentenced from FY2002 through FY2025 (1.72M), from the U.S.
   Sentencing Commission's public individual offender datafiles: demographics, offense
   of conviction, guideline calculations, sentence imposed, departures and variances.
   The Commission's ~22,000-variable fixed-width layout is reshaped into a wide
   `sentences` table plus long tables per count of conviction, guideline computation,
   drug type and departure reason.
 quick_start_sql: |
-  SELECT fiscal_year, COUNT(*) AS defendants, ROUND(AVG(SENTTOT), 1) AS avg_months
+  SELECT fiscal_year, COUNT(*) AS defendants,
+         ROUND(AVG(TOTPRISN), 1) AS avg_prison_months   -- 0 for probation-only
   FROM ussc.sentences GROUP BY 1 ORDER BY 1;
 footer: |
   Build pipeline, the USSC codebook and caveats: https://github.com/ian-nason/ussc-database
