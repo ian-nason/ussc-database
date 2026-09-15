@@ -1,0 +1,7 @@
+data/
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp/
+.venv/
+__pycache__/
+docs_codebook.txt
