@@ -2107,6 +2107,7 @@ Rows: 1,720,684
 | USSCIDN | DOUBLE | 0.0% | 1000001.0 | USSC case identifier; joins every table |
 | prison_months | DOUBLE | 0.4% | 0.0 |  |
 | term_type | VARCHAR | 0.0% | death |  |
+| prison_imposed | BOOLEAN | 0.1% | false |  |
 | TOTPRISN | DOUBLE | 0.1% | 0.0 |  |
 | SENTTOT | DOUBLE | 12.4% | 0.03 |  |
 | SENTIMP | DOUBLE | 0.1% | 0.0 |  |

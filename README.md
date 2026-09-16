@@ -43,11 +43,11 @@ variables (`MAND1`-`MAND6`, `POINT1`-`POINT3`, `GUNMIN1`-`GUNMIN3`, `CAFROM1`/`C
 import datapond
 con = datapond.connect("ussc")
 con.sql("""
-    -- defendants per year, share sentenced to prison, and the mean term among
-    -- ordinary month-denominated prison terms (life, death and "no term stated" are
-    -- categories in the source, reported separately below, not months)
+    -- defendants per year, share with a prison sentence imposed (PRISDUM, the codebook's
+    -- indicator), and the mean term among ordinary month-denominated prison terms
+    -- (life, death and "no term stated" are categories in the source, counted separately)
     SELECT fiscal_year, COUNT(*) AS defendants,
-           ROUND(100.0 * COUNT(*) FILTER (WHERE term_type IN ('months', 'life', 'death', 'prison, no term stated')) / COUNT(*), 1) AS pct_prison,
+           ROUND(100.0 * COUNT(*) FILTER (WHERE prison_imposed) / COUNT(*) FILTER (WHERE prison_imposed IS NOT NULL), 1) AS pct_prison_imposed,
            ROUND(AVG(prison_months) FILTER (WHERE term_type = 'months'), 1) AS mean_months_when_term_stated,
            COUNT(*) FILTER (WHERE term_type = 'life') AS life,
            COUNT(*) FILTER (WHERE term_type = 'prison, no term stated') AS no_term_stated
@@ -56,12 +56,16 @@ con.sql("""
 ```
 
 `v_sentence_terms` is `sentences` with `TOTPRISN` split into `prison_months` (real month
-counts) and `term_type`. `TOTPRISN` alone is not averageable: the Commission codes
-9992 = under one day, 9996 = life, 9997 = prison with no term stated and 9998 = death
-(4,990 rows; nine more rows carry 9990 or an implausible total above 9990 and are labelled `other special code`), and it excludes imposed days, time served and section 5G1.3 credit.
-`SENTTOT` is the Commission's capped composite (life = 470 in early years, 9996/9997
-later) and is NULL for probation-only sentences; read the codebook's Appendix B before
-choosing a sentencing measure and always state the denominator.
+counts) and `term_type`, plus `prison_imposed` from `PRISDUM`. `TOTPRISN` alone is neither
+averageable nor an incidence measure: the Commission codes 9992 = under one day, 9996 =
+life, 9997 = prison with no term stated and 9998 = death (4,990 rows; nine more rows carry
+9990 or an implausible total above 9990 and are labelled `other special code`), zero means
+"no prison or less than one month ordered" (229,535 zero-month rows have `PRISDUM = 1`),
+and it excludes imposed days, time served and section 5G1.3 credit. `SENTTOT` is the
+Commission's capped composite (life = 470 in early years, 9996/9997 later) and is NULL for
+probation-only sentences; read the codebook's Appendix B before choosing a sentencing
+measure, state the denominator, and decide explicitly how the 2,120 rows with a missing
+`PRISDUM` enter it (the example above drops them from the share's denominator).
 
 ## Researcher caveats
 
@@ -70,11 +74,13 @@ choosing a sentencing measure and always state the denominator.
   NULL (year-specific or rarely-coded items). A column that is NULL for a whole fiscal year
   was not collected that year. `_columns.null_pct` and the codebook's "available FY..."
   notes explain most gaps.
-- **No raw sentencing variable is a plain month count.** `TOTPRISN` (0 for no prison)
-  carries the special codes 9992/9996/9997/9998 described above; `SENTTOT` is NULL for
-  probation-only and zero-month sentences and caps life at 470 in early years. Use
-  `v_sentence_terms.prison_months` with `term_type = 'months'` for averages and report
-  life / death / no-term-stated counts alongside.
+- **No raw sentencing variable is a plain month count or a prison indicator.**
+  `TOTPRISN` carries the special codes 9992/9996/9997/9998 described above and its zero
+  covers both no prison and terms under one month; `SENTTOT` is NULL for probation-only
+  and zero-month sentences and caps life at 470 in early years. Use
+  `v_sentence_terms.prison_months` with `term_type = 'months'` for averages,
+  `prison_imposed` (`PRISDUM`) for incidence, and report life / death / no-term-stated
+  counts alongside.
 - The FY2010 file contains one record twice (`USSCIDN` 1325685, byte-identical). It is kept as
   published; `(fiscal_year, USSCIDN)` is otherwise unique.
 - Slot arrays widen over time (counts of conviction: 266 slots in FY2002, 884 in FY2018,
