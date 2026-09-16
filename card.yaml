@@ -16,8 +16,11 @@ intro: |
   drug type and departure reason.
 quick_start_sql: |
   SELECT fiscal_year, COUNT(*) AS defendants,
-         ROUND(AVG(TOTPRISN), 1) AS avg_prison_months   -- 0 for probation-only
-  FROM ussc.sentences GROUP BY 1 ORDER BY 1;
+         ROUND(AVG(prison_months) FILTER (WHERE term_type = 'months'), 1) AS mean_months_when_term_stated,
+         COUNT(*) FILTER (WHERE term_type = 'life') AS life
+  FROM ussc.v_sentence_terms GROUP BY 1 ORDER BY 1;
+  -- TOTPRISN alone is not averageable: 9992/9996/9997/9998 are codes (under a day / life /
+  -- no term stated / death), which the view separates into term_type.
 footer: |
   Build pipeline, the USSC codebook and caveats: https://github.com/ian-nason/ussc-database
   Source: https://www.ussc.gov/research/datafiles/commission-datafiles (public domain).

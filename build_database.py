@@ -70,6 +70,7 @@ TABLE_DESCRIPTIONS = {
     "chapter_text": "Free-text chapter 2/3/4 guideline notes (CHP2TXT/CHP3TXT/CHP4TXT) and change flags",
     "new_statutes": "Statutes of conviction as recorded in NWSTAT slots",
     "offense_dates": "Offense begin/end dates per slot (OFBEG/OFEND; FY2002-era files only)",
+    "v_sentence_terms": "View over sentences: prison_months (TOTPRISN with the special codes >= 9990 removed) and term_type (months / no prison / life / death / prison with no term stated / under one day / missing)",
 }
 
 JOIN_HINTS = {
@@ -326,6 +327,12 @@ def run_validation(con, n_years: int) -> int:
     # SENTTOT is NULL by design for probation-only and zero-month sentences (codebook); TOTPRISN
     # carries 0 for those, so it is the coverage check.
     ck.query(con, "TOTPRISN populated (> 98%)", "SELECT COUNT(TOTPRISN) * 1.0 / COUNT(*) FROM sentences", lambda v: v > 0.98, lambda v: f"{v:.1%}")
+    # 9 rows carry 9990 (FY2002-07) or an out-of-range total (11520, 19080); they surface as
+    # term_type = 'other special code' rather than being averaged as months
+    ck.query(con, "TOTPRISN values >= 9990 outside the codebook's 9992/9996/9997/9998 stay a handful (<= 20)",
+             "SELECT COUNT(*) FROM sentences WHERE TOTPRISN >= 9990 AND TOTPRISN NOT IN (9992, 9996, 9997, 9998)", lambda n: n <= 20, str)
+    ck.query(con, "v_sentence_terms: prison_months never carries a special code", "SELECT COALESCE(MAX(prison_months), 0) FROM v_sentence_terms", lambda v: v < 9990, str)
+    ck.query(con, "v_sentence_terms: 'other special code' rows stay a handful (<= 20)", "SELECT COUNT(*) FROM v_sentence_terms WHERE term_type = 'other special code'", lambda n: n <= 20, str)
     ck.query(con, "SENTTOT populated (> 80%; NULL = probation/zero months)", "SELECT COUNT(SENTTOT) * 1.0 / COUNT(*) FROM sentences", lambda v: v > 0.8, lambda v: f"{v:.1%}")
     ck.query(con, "counts rows >= sentences rows", "SELECT (SELECT COUNT(*) FROM counts) >= (SELECT COUNT(*) FROM sentences)", lambda v: v, str)
     ck.query(con, "defendants with a guideline computation >= 80% every year",
@@ -361,6 +368,24 @@ def main():
         for k, v in c.items():
             totals[k] += v
         print(f"  FY{fy}: " + ", ".join(f"{k} {v:,}" for k, v in c.items()) + f"  ({time.time() - t1:.0f}s)")
+    # TOTPRISN carries the Commission's special codes above 9990 (see the codebook): 9992
+    # under one day, 9996 life, 9997 prison with no term stated, 9998 death. They are
+    # categories, not months; the view separates them so averages use real month counts.
+    con.execute("""
+        CREATE OR REPLACE VIEW v_sentence_terms AS
+        SELECT fiscal_year, USSCIDN,
+               CASE WHEN TOTPRISN IS NULL THEN NULL WHEN TOTPRISN < 9990 THEN TOTPRISN END AS prison_months,
+               CASE WHEN TOTPRISN IS NULL THEN 'missing'
+                    WHEN TOTPRISN = 0 THEN 'no prison'
+                    WHEN TOTPRISN < 9990 THEN 'months'
+                    WHEN TOTPRISN = 9992 THEN 'less than one day'
+                    WHEN TOTPRISN = 9996 THEN 'life'
+                    WHEN TOTPRISN = 9997 THEN 'prison, no term stated'
+                    WHEN TOTPRISN = 9998 THEN 'death'
+                    ELSE 'other special code' END AS term_type,
+               TOTPRISN, SENTTOT, SENTIMP, PRISDUM
+        FROM sentences""")
+    totals["v_sentence_terms"] = con.execute("SELECT COUNT(*) FROM v_sentence_terms").fetchone()[0]
     print("\nMetadata + dictionary")
     ensure_metadata(con, descriptions=TABLE_DESCRIPTIONS, tables=list(totals),
                     source_url="https://www.ussc.gov/research/datafiles/commission-datafiles", license="Public domain", replace=True)
