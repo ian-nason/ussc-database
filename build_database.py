@@ -385,16 +385,16 @@ def main():
                     ELSE 'other special code' END AS term_type,
                TOTPRISN, SENTTOT, SENTIMP, PRISDUM
         FROM sentences""")
-    totals["v_sentence_terms"] = con.execute("SELECT COUNT(*) FROM v_sentence_terms").fetchone()[0]
+    documented = list(totals) + ["v_sentence_terms"]  # the view is in the dictionary, not in the row totals
     print("\nMetadata + dictionary")
     ensure_metadata(con, descriptions=TABLE_DESCRIPTIONS, tables=list(totals),
                     source_url="https://www.ussc.gov/research/datafiles/commission-datafiles", license="Public domain", replace=True)
-    build_columns_table(con, join_hints=JOIN_HINTS, tables=list(totals))
+    build_columns_table(con, join_hints=JOIN_HINTS, tables=documented)
     export_dictionary(con, Path("DICTIONARY.md"), title="ussc Data Dictionary",
                       intro=["Source: [U.S. Sentencing Commission individual offender datafiles](https://www.ussc.gov/research/datafiles/commission-datafiles), FY2002-FY2025.",
                              "Variable names are the Commission's; definitions and code values are in `docs/USSC_Public_Release_Codebook_FY99_FY25.pdf`.",
                              "Array variables (per count, per guideline, per drug ...) are unpivoted into the long tables keyed by (fiscal_year, USSCIDN, seq)."],
-                      style="registry", tables=list(totals))
+                      style="registry", tables=documented)
     con.execute("CHECKPOINT")
     stage = fresh_stage(con, a.output)
     con.execute("DETACH stage"); stage.unlink()
