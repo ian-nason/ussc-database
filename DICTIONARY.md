@@ -2100,45 +2100,9 @@ Rows: 1,720,684
 
 ## v_sentence_terms
 
-View over sentences: prison_months (TOTPRISN with the special codes >= 9990 removed) and term_type (months / no prison / life / death / prison with no term stated / under one day / missing)
-
-Rows: 1,720,684
 
 | Column | Type | Nulls | Example | Join |
 |--------|------|-------|---------|------|
-| fiscal_year | INTEGER | 0.0% | 2002 | Fiscal year of sentencing (from the datafile); joins every table |
-| USSCIDN | DOUBLE | 0.0% | 1000001.0 | USSC case identifier; joins every table |
-| prison_months | DOUBLE | 0.4% | 0.0 |  |
-| term_type | VARCHAR | 0.0% | death |  |
-| TOTPRISN | DOUBLE | 0.1% | 0.0 |  |
-| SENTTOT | DOUBLE | 12.4% | 0.03 |  |
-| SENTIMP | DOUBLE | 0.1% | 0.0 |  |
-| PRISDUM | DOUBLE | 0.1% | 0.0 |  |
-| fiscal_year | INTEGER | 0.0% | 2002 | Fiscal year of sentencing (from the datafile); joins every table |
-| USSCIDN | DOUBLE | 0.0% | 1000001.0 | USSC case identifier; joins every table |
-| prison_months | DOUBLE | 0.4% | 0.0 |  |
-| term_type | VARCHAR | 0.0% | death |  |
-| TOTPRISN | DOUBLE | 0.1% | 0.0 |  |
-| SENTTOT | DOUBLE | 12.4% | 0.03 |  |
-| SENTIMP | DOUBLE | 0.1% | 0.0 |  |
-| PRISDUM | DOUBLE | 0.1% | 0.0 |  |
-
-## v_sentence_terms
-
-View over sentences: prison_months (TOTPRISN with the special codes >= 9990 removed) and term_type (months / no prison / life / death / prison with no term stated / under one day / missing)
-
-Rows: 1,720,684
-
-| Column | Type | Nulls | Example | Join |
-|--------|------|-------|---------|------|
-| fiscal_year | INTEGER | 0.0% | 2002 | Fiscal year of sentencing (from the datafile); joins every table |
-| USSCIDN | DOUBLE | 0.0% | 1000001.0 | USSC case identifier; joins every table |
-| prison_months | DOUBLE | 0.4% | 0.0 |  |
-| term_type | VARCHAR | 0.0% | death |  |
-| TOTPRISN | DOUBLE | 0.1% | 0.0 |  |
-| SENTTOT | DOUBLE | 12.4% | 0.03 |  |
-| SENTIMP | DOUBLE | 0.1% | 0.0 |  |
-| PRISDUM | DOUBLE | 0.1% | 0.0 |  |
 | fiscal_year | INTEGER | 0.0% | 2002 | Fiscal year of sentencing (from the datafile); joins every table |
 | USSCIDN | DOUBLE | 0.0% | 1000001.0 | USSC case identifier; joins every table |
 | prison_months | DOUBLE | 0.4% | 0.0 |  |

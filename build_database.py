@@ -358,7 +358,9 @@ def main():
     con = connect(a.output, fresh=not a.finalize_only, memory_limit="3GB", threads=1)
     totals: dict[str, int] = defaultdict(int)
     if a.finalize_only:
-        for t in [r[0] for r in con.execute("SHOW TABLES").fetchall()]:
+        base_tables = [r[0] for r in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE' ORDER BY 1").fetchall()]
+        for t in base_tables:
             if not t.startswith("_"):
                 totals[t] = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         a.years = [r[0] for r in con.execute("SELECT DISTINCT fiscal_year FROM sentences ORDER BY 1").fetchall()]
