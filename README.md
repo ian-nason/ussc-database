@@ -1,59 +1,70 @@
-# U.S. Sentencing Commission individual offender datafiles as a DuckDB database
+<a id="us-sentencing-commission-individual-offender-datafiles-as-a-duckdb-database"></a>
 
-Every federal defendant sentenced from FY2002 through FY2025 (1,720,684 defendants, 14.0M rows), from the
-[U.S. Sentencing Commission's public datafiles](https://www.ussc.gov/research/datafiles/commission-datafiles)
-(the "individual offender" files without identifiers), reshaped into a queryable DuckDB file.
+# USSC Federal Sentencing Database
 
-## Why the reshaping
+Federal sentencing records from the U.S. Sentencing Commission (USSC) for fiscal years (FY) 2002–2025. Start with `sentences` for recorded demographics, offenses, guideline ranges and sentence outcomes; related tables describe counts of conviction, drugs and guideline calculations. Use `v_sentence_terms` for documented prison-term measures, because raw sentence fields contain special codes. The 1,720,684 sentencing rows include a retained source duplicate and are not a cross-year person register.
 
-The Commission publishes one fixed-width file per fiscal year with ~22,000 variables,
-because every repeating item is stored as a numbered slot: `TTSC1_1 ... TTSC1_111` for the
-statute of each count of conviction, `ADJ_B1 ... ADJ_B66` for each guideline computation,
-and so on. Loading that as one wide table would give a 22,000-column table that is
-mostly empty. Instead:
+<a id="quick-start"></a>
+
+## Start querying
+
+Preview up to five sentencing records with a stated prison term longer than 120 months (10 years). `fiscal_year` is the sentencing reporting year and `prison_months` is the term length; `term_type = 'months'` excludes separately coded life, death and unspecified terms.
+
+Choose R or Python. Install the datapond package once: use `install.packages("datapond")` in R, or run `python -m pip install datapond` in a terminal.
+
+### R
+
+```r
+library(datapond)
+con <- dp_connect("ussc")
+tryCatch({
+  DBI::dbExecute(con, "SET threads=1")
+  DBI::dbExecute(con, "SET memory_limit='128MiB'")
+  DBI::dbExecute(con, "SET max_temp_directory_size='0B'")
+  print(DBI::dbGetQuery(con, "SELECT fiscal_year,prison_months,term_type FROM v_sentence_terms WHERE term_type='months' AND prison_months>120 LIMIT 5"))
+}, finally = dp_disconnect(con))
+```
+
+### Python
+
+```python
+import datapond
+con = datapond.connect('ussc')
+try:
+    con.execute("SET threads=1")
+    con.execute("SET memory_limit='128MiB'")
+    con.execute("SET max_temp_directory_size='0B'")
+    print(con.execute("""SELECT fiscal_year,prison_months,term_type FROM v_sentence_terms WHERE term_type='months' AND prison_months>120 LIMIT 5""").fetchall())
+finally:
+    con.close()
+```
+
+Queries run on your computer and read the byte ranges they need. A small result can still require a large scan. These examples limit DuckDB to one thread and a 128 MiB buffer pool with disk spill disabled; that is not a limit on the entire R or Python process. Larger analyses may need more memory or a local download with enough disk space.
+
+<a id="additional-dataset-notes"></a>
+
+## Tables and record units
+
+**1,720,684 sentencing records and about 14.0 million rows including related tables.** `sentences` is a wide table: many fields describe one sentencing record. The related long tables put repeated items, such as counts of conviction or drug types, on separate rows. A source “slot” is the numbered position of one of those repeated items; a “scalar” is a single-value field kept on `sentences`.
 
 | Table | One row per | Contents |
 |-------|-------------|----------|
-| `sentences` | sentenced defendant | every scalar variable (demographics, offense, guideline range, sentence, departures) |
+| `sentences` | sentencing source record | single-value fields (demographics, offense, guideline range, sentence, departures) |
 | `counts` | count of conviction | statute title/section/subsection (`TTSC1`-`TTSC3`), statutory min/max (`SMIN`/`SMAX`), `STA1`-`STA3` |
 | `guidelines` | guideline computation | base offense level, specific offense characteristics, Chapter 3 adjustments (`ADJ_*`, `BASE`, `ADJOFL`, ...) |
 | `drugs` | drug type on the case | `DRUGTYP`, `WGT`, `UNIT`, `MWGT`, `DRGAM`, `DESCRIP`, dates |
 | `departure_reasons` | stated departure reason | `REAS` code + `RETEXT` text (FY2004+, post-Booker coding) or `REASON` + `REASTXT` (FY2002-03, pre-Booker coding) |
-| `pleas` | plea/verdict slot | `INPLEA`, `INNOPL` |
+| `pleas` | recorded plea/verdict entry | `INPLEA`, `INNOPL` |
 | `chapter_text` | free-text guideline note | `CHP2TXT`/`CHP3TXT`/`CHP4TXT` and change flags |
-| `new_statutes` | `NWSTAT` slot | statutes of conviction |
-| `offense_dates` | slot | `OFBEG`/`OFEND` (FY2002-era files only) |
-| `v_sentence_terms` (view) | sentenced defendant | `prison_months` and `term_type` derived from `TOTPRISN` (special codes separated) |
+| `new_statutes` | recorded `NWSTAT` entry | statutes of conviction |
+| `offense_dates` | recorded begin/end-date entry | `OFBEG`/`OFEND` (FY2002-era files only) |
+| `v_sentence_terms` (view) | sentencing source record | `prison_months` and `term_type` derived from `TOTPRISN` (special codes separated) |
 
-Every long table is keyed by (`fiscal_year`, `USSCIDN`, `seq`); empty slots are not stored.
-Variable names are the Commission's; definitions and code values are in
-`docs/USSC_Public_Release_Codebook_FY99_FY25.pdf`. Numeric variables are `DOUBLE`
-(the Commission's blank = missing), character variables are `VARCHAR`.
+See the [data dictionary](https://github.com/ian-nason/ussc-database/blob/main/DICTIONARY.md) for column definitions.
 
-What counts as an array is decided once over all 24 layouts: a numbered family is
-unpivoted if it ever has 10 or more slots, uses the `NAME_n` form (`TTSC1_1`, `ADJ_B1`)
-or is one of the named groups above. Small numbered sets that are really distinct
-variables (`MAND1`-`MAND6`, `POINT1`-`POINT3`, `GUNMIN1`-`GUNMIN3`, `CAFROM1`/`CATO1`,
-`CHEMTYP1`/`CHEMTYP2`, `RESTDET1`-`RESTDET6`, `BOOKER1`-`BOOKER4`, ...) stay as columns of
-`sentences`, so the schema is the same whichever fiscal years are loaded.
+## Joining records and choosing sentence measures
 
-## Quick start
-
-```python
-import datapond
-con = datapond.connect("ussc")
-con.sql("""
-    -- defendants per year, share with a prison sentence imposed (PRISDUM, the codebook's
-    -- indicator), and the mean term among ordinary month-denominated prison terms
-    -- (life, death and "no term stated" are categories in the source, counted separately)
-    SELECT fiscal_year, COUNT(*) AS defendants,
-           ROUND(100.0 * COUNT(*) FILTER (WHERE prison_imposed) / COUNT(*) FILTER (WHERE prison_imposed IS NOT NULL), 1) AS pct_prison_imposed,
-           ROUND(AVG(prison_months) FILTER (WHERE term_type = 'months'), 1) AS mean_months_when_term_stated,
-           COUNT(*) FILTER (WHERE term_type = 'life') AS life,
-           COUNT(*) FILTER (WHERE term_type = 'prison, no term stated') AS no_term_stated
-    FROM v_sentence_terms GROUP BY 1 ORDER BY 1
-""").show()
-```
+Join related tables using `fiscal_year` and `USSCIDN`, the Commission’s case identifier for that fiscal year. Each long-table row also has `seq`, its source slot number; unused slots are not stored. `USSCIDN` is not a cross-year person identifier.
 
 `v_sentence_terms` is `sentences` with `TOTPRISN` split into `prison_months` (real month
 counts) and `term_type`, plus `prison_imposed` from `PRISDUM`. `TOTPRISN` alone is neither
@@ -65,12 +76,12 @@ and it excludes imposed days, time served and section 5G1.3 credit. `SENTTOT` is
 Commission's capped composite (life = 470 in early years, 9996/9997 later) and is NULL for
 probation-only sentences; read the codebook's Appendix B before choosing a sentencing
 measure, state the denominator, and decide explicitly how the 2,120 rows with a missing
-`PRISDUM` enter it (the example above drops them from the share's denominator).
+`PRISDUM` enter it (the aggregate example below drops them from the share's denominator).
 
 ## Researcher caveats
 
 - **Variables come and go across fiscal years.** `sentences` has 1,610 columns, the union of
-  every year's scalar variables; 216 are populated in most rows and 1,215 are at least 99%
+  every year's single-value fields; 216 are populated in most rows and 1,215 are at least 99%
   NULL (year-specific or rarely-coded items). A column that is NULL for a whole fiscal year
   was not collected that year. `_columns.null_pct` and the codebook's "available FY..."
   notes explain most gaps.
@@ -89,13 +100,66 @@ measure, state the denominator, and decide explicitly how the 2,120 rows with a 
 - **FY2002 codes `REASON = 0` ("no reason given") explicitly in every departure slot**, so
   `departure_reasons` has three rows per FY2002 defendant; filter `REASON > 0` (later years
   leave unused slots blank, and blank / SAS `.` slots are never stored).
-- Positions in the Commission's SAS layout are byte offsets. Files are read one byte per
+- Free-text punctuation in some FY2006 and FY2017 records is replaced by `?`; take care when matching or interpreting that text.
+- FY1999-FY2001 files exist only at ICPSR under terms that do not allow redistribution.
+
+<a id="advanced-access-quick-start"></a>
+
+## More example queries
+
+Summarize sentencing records by fiscal year. The output column `defendants` is a count of sentencing records, including the retained FY2010 duplicate, not distinct people. `pct_prison_imposed` excludes missing prison indicators from its denominator; `mean_months_when_term_stated` averages only ordinary month-denominated terms. Life and unstated terms are counted separately.
+
+```python
+import datapond
+con = datapond.connect("ussc")
+con.sql("""
+    -- defendants per year, share with a prison sentence imposed (PRISDUM, the codebook's
+    -- indicator), and the mean term among ordinary month-denominated prison terms
+    -- (life, death and "no term stated" are categories in the source, counted separately)
+    SELECT fiscal_year, COUNT(*) AS defendants,
+           ROUND(100.0 * COUNT(*) FILTER (WHERE prison_imposed) / COUNT(*) FILTER (WHERE prison_imposed IS NOT NULL), 1) AS pct_prison_imposed,
+           ROUND(AVG(prison_months) FILTER (WHERE term_type = 'months'), 1) AS mean_months_when_term_stated,
+           COUNT(*) FILTER (WHERE term_type = 'life') AS life,
+           COUNT(*) FILTER (WHERE term_type = 'prison, no term stated') AS no_term_stated
+    FROM v_sentence_terms GROUP BY 1 ORDER BY 1
+""").show()
+```
+
+<a id="coverage-fields-and-sources"></a>
+
+## Sources and maintenance
+
+### Sources and codebooks
+
+Source: [U.S. Sentencing Commission](https://www.ussc.gov/research/datafiles/commission-datafiles). License: Public domain.
+
+The [U.S. Sentencing Commission’s public datafiles](https://www.ussc.gov/research/datafiles/commission-datafiles) are its “individual offender” files without identifiers. Variable names are the Commission’s; definitions and code values, including departure/variance reason coding, are in `docs/USSC_Public_Release_Codebook_FY99_FY25.pdf`.
+
+<a id="why-the-reshaping"></a>
+
+### How the files are reshaped
+
+The Commission publishes one fixed-width file per fiscal year with ~22,000 variables,
+because every repeating item is stored as a numbered slot: `TTSC1_1 ... TTSC1_111` for the
+statute of each count of conviction, `ADJ_B1 ... ADJ_B66` for each guideline computation,
+and so on. Loading that as one wide table would give a 22,000-column table that is
+mostly empty. The repeated items are stored in the separate tables described above.
+
+Numeric variables are `DOUBLE` (the Commission’s blank means missing); character variables are `VARCHAR`.
+
+What counts as an array is decided once over all 24 layouts: a numbered family is
+unpivoted if it ever has 10 or more slots, uses the `NAME_n` form (`TTSC1_1`, `ADJ_B1`)
+or is one of the named groups above. Small numbered sets that are really distinct
+variables (`MAND1`-`MAND6`, `POINT1`-`POINT3`, `GUNMIN1`-`GUNMIN3`, `CAFROM1`/`CATO1`,
+`CHEMTYP1`/`CHEMTYP2`, `RESTDET1`-`RESTDET6`, `BOOKER1`-`BOOKER4`, ...) stay as columns of
+`sentences`, so the schema is the same whichever fiscal years are loaded.
+
+Positions in the Commission's SAS layout are byte offsets. Files are read one byte per
   character; the stray Windows-1252 punctuation some years carry in free-text fields
   (FY2006, FY2017) is replaced by `?` rather than dropped, so no column shifts. Every line is
   checked against the layout length before loading.
-- FY1999-FY2001 files exist only at ICPSR under terms that do not allow redistribution.
 
-## Build
+### Build
 
 ```bash
 uv sync
@@ -104,6 +168,6 @@ uv run python build_database.py  # one fiscal year at a time (~4 min each); Duck
 uv run python publish_to_hf.py --token hf_xxx --verify
 ```
 
-## License
+### License
 
 Code: MIT. Data: public domain (U.S. federal government).
